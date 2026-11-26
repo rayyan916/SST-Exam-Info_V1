@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>考試資訊顯示系統｜香港天文台時鐘</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+
+    :root {
+      --exam-scale: 1;
+    }
+
+    body {
+      font-family: "Noto Sans TC", "PingFang HK", "Microsoft JhengHei", sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .exam-card {
+      border: 3px solid #1e293b;
+      background-color: #ffffff;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .exam-grade {
+      font-size: calc(clamp(1.75rem, 3.2vw, 3rem) * var(--exam-scale));
+      line-height: 1.25;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    .exam-subject {
+      font-size: calc(clamp(2rem, 3.8vw, 3.5rem) * var(--exam-scale));
+      line-height: 1.25;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+    }
+
+    .exam-time {
+      font-size: calc(clamp(1.85rem, 3.4vw, 3.1rem) * var(--exam-scale));
+      line-height: 1.3;
+      font-weight: 700;
+    }
+
+    .exam-extra {
+      font-size: calc(clamp(1.5rem, 2.7vw, 2.5rem) * var(--exam-scale));
+      line-height: 1.35;
+      font-weight: 700;
+    }
+
+    .hko-frame-wrap {
+      position: relative;
+      width: 100%;
+      overflow: hidden;
+      background: #ffffff;
+      border-radius: 0.75rem;
+      border: 2px solid #cbd5e1;
+    }
+
+    .hko-iframe {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
+    /* Presentation / Fullscreen mode hides setup bar */
+    body.presentation-mode #topHeader,
+    body.presentation-mode #setupView {
+      display: none !important;
+    }
+
+    body.presentation-mode #displayView {
+      padding-top: 1rem;
+    }
+
+    #floatingExitBtn {
+      display: none;
+    }
+
+    body.presentation-mode #floatingExitBtn {
+      display: inline-flex;
+    }
+
+    @media print {
+      #topHeader, #displayToolbar, #floatingExitBtn, #clockSection {
+        display: none !important;
+      }
+      body {
+        background: #ffffff;
+      }
+      .exam-card {
+        box-shadow: none;
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+  <!-- Top Navigation / Header -->
+  <header id="topHeader" class="bg-slate-900 text-white px-4 py-3 shadow-md">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-sky-500 flex items-center justify-center font-bold text-lg">考</div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-wide">考試資訊顯示系統</h1>
+          <p class="text-xs text-slate-300">電腦 / 平板電腦適用 · 附香港天文台時鐘</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <button id="navStep1Btn" type="button" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 transition">
+          1. 卷別數量
+        </button>
+        <button id="navStep2Btn" type="button" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700 hover:bg-slate-600 transition">
+          2. 輸入資料
+        </button>
+        <button id="navDisplayBtn" type="button" class="px-3 py-1.5 rounded-lg text-sm font-medium bg-sky-600 hover:bg-sky-500 transition">
+          3. 顯示畫面
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Floating Exit Presentation Mode Button -->
+  <button id="floatingExitBtn" type="button"
+    class="fixed bottom-4 right-4 z-50 items-center gap-2 px-4 py-2.5 rounded-full bg-slate-900/85 text-white text-sm font-semibold shadow-lg hover:bg-slate-900 backdrop-blur transition">
+    <span>返回設定</span>
+  </button>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed top-4 right-4 z-50 hidden px-4 py-2.5 rounded-lg bg-slate-800 text-white text-sm font-medium shadow-lg transition"></div>
+
+  <!-- Main Content -->
+  <main class="flex-1 w-full max-w-7xl mx-auto px-4 py-6">
+
+    <!-- SETUP VIEW (Step 1 + Step 2) -->
+    <section id="setupView" class="space-y-6">
+
+      <!-- Step 1: Number of Exam Papers -->
+      <div id="step1Card" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8 max-w-2xl mx-auto">
+        <div class="flex items-center gap-2 text-sky-700 font-bold text-sm uppercase tracking-wider mb-2">
+          <span class="px-2 py-0.5 rounded bg-sky-100">步驟 1</span>
+          <span>設定考試卷別數目</span>
+        </div>
+        <h2 class="text-2xl font-bold text-slate-900 mb-2">須要顯示多少個考試卷別？</h2>
+        <p class="text-slate-600 text-sm mb-6">請輸入今節考試需要同時顯示的卷別數量（例如 1 至 8 個），然後填寫各卷別詳情。</p>
+
+        <div class="flex flex-wrap items-center gap-3 mb-5">
+          <label for="paperCountInput" class="text-base font-semibold text-slate-800">卷別數量：</label>
+          <input id="paperCountInput" type="number" min="1" max="12" value="1"
+            class="w-28 px-3 py-2 text-xl font-bold text-center border-2 border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none tabular-nums" />
+          <div class="flex items-center gap-1.5">
+            <button type="button" data-count="1" class="quick-count-btn px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-sky-50 hover:border-sky-400 font-semibold text-sm transition">1 份</button>
+            <button type="button" data-count="2" class="quick-count-btn px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-sky-50 hover:border-sky-400 font-semibold text-sm transition">2 份</button>
+            <button type="button" data-count="3" class="quick-count-btn px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-sky-50 hover:border-sky-400 font-semibold text-sm transition">3 份</button>
+            <button type="button" data-count="4" class="quick-count-btn px-3 py-2 rounded-lg border border-slate-300 bg-slate-50 hover:bg-sky-50 hover:border-sky-400 font-semibold text-sm transition">4 份</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-slate-100">
+          <button id="goToStep2Btn" type="button"
+            class="px-6 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-base shadow-sm transition">
+            下一步：輸入卷別資料 →
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Details for Each Paper -->
+      <div id="step2Card" class="hidden space-y-5">
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 text-sky-700 font-bold text-sm mb-1">
+              <span class="px-2 py-0.5 rounded bg-sky-100">步驟 2</span>
+              <span>輸入每個卷別資料</span>
+            </div>
+            <h2 class="text-xl font-bold text-slate-900">共 <span id="step2CountLabel" class="text-sky-600 tabular-nums">1</span> 個考試卷別</h2>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="backToStep1Btn" type="button"
+              class="px-4 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-sm transition">
+              ← 更改數量
+            </button>
+            <button id="addPaperBtn" type="button"
+              class="px-4 py-2 rounded-xl border border-sky-300 bg-sky-50 hover:bg-sky-100 text-sky-800 font-semibold text-sm transition">
+              + 新增卷別
+            </button>
+            <button id="startDisplayBtn" type="button"
+              class="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-base shadow-sm transition">
+              開始顯示考試資訊 ✓
+            </button>
+          </div>
+        </div>
+
+        <!-- Dynamic Paper Forms Container -->
+        <div id="paperFormsContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-5"></div>
+
+        <div class="flex justify-end pt-2">
+          <button id="startDisplayBottomBtn" type="button"
+            class="w-full sm:w-auto px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-lg shadow-sm transition">
+            完成輸入並顯示畫面 ✓
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- DISPLAY VIEW (Step 3) -->
+    <section id="displayView" class="hidden space-y-5">
+
+      <!-- Display Controls Toolbar -->
+      <div id="displayToolbar" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-2">
+          <button id="editDataBtn" type="button"
+            class="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm transition">
+            ✎ 修改卷別資料
+          </button>
+          <button id="toggleLayoutBtn" type="button"
+            class="px-3.5 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-semibold text-sm transition">
+            版面：時鐘置頂
+          </button>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-3">
+          <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl">
+            <span class="text-xs font-semibold text-slate-600">字體大小</span>
+            <button id="fontSmallerBtn" type="button" class="w-7 h-7 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-sm">A-</button>
+            <span id="fontScaleLabel" class="text-xs font-bold text-slate-800 w-10 text-center tabular-nums">100%</span>
+            <button id="fontLargerBtn" type="button" class="w-7 h-7 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 font-bold text-sm">A+</button>
+          </div>
+
+          <button id="presentationBtn" type="button"
+            class="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm transition">
+            全螢幕投影模式
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Display Grid (Clock + Exam Cards) -->
+      <div id="displayMainGrid" class="flex flex-col gap-6">
+
+        <!-- Hong Kong Observatory Clock Section -->
+        <div id="clockSection" class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div class="flex items-center gap-2">
+              <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <h2 class="text-base sm:text-lg font-bold text-slate-800">香港天文台標準時間</h2>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button id="clockModeHkoFull" type="button"
+                class="clock-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-600 text-white transition">
+                天文台網上時鐘
+              </button>
+              <button id="clockModeHkoLite" type="button"
+                class="clock-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                天文台精簡版
+              </button>
+              <button id="clockModeFallback" type="button"
+                class="clock-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition">
+                大字備用時鐘
+              </button>
+              <a href="https://www.hko.gov.hk/tc/gts/time/clock_e.html" target="_blank" rel="noopener noreferrer"
+                class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-sky-700 hover:bg-sky-50 border border-slate-200 transition">
+                新視窗開啟 ↗
+              </a>
+            </div>
+          </div>
+
+          <!-- HKO Iframe Container -->
+          <div id="hkoIframeContainer" class="hko-frame-wrap h-56 sm:h-64">
+            <iframe id="hkoClockIframe"
+              src="https://www.hko.gov.hk/tc/gts/time/clock_e.html"
+              title="香港天文台網上時鐘"
+              class="hko-iframe"
+              loading="lazy"></iframe>
+          </div>
+
+          <!-- Fallback Large Digital Clock (UTC+8 Hong Kong Time) -->
+          <div id="fallbackClockContainer" class="hidden rounded-xl border-2 border-slate-800 bg-slate-900 text-white p-5 text-center">
+            <div id="hkDateText" class="text-sm sm:text-base text-sky-300 font-medium mb-1"></div>
+            <div id="hkTimeText" class="text-5xl sm:text-6xl font-black tracking-wider tabular-nums"></div>
+            <div class="text-xs text-slate-400 mt-2">香港標準時間 (UTC+8) · 參考香港天文台授時</div>
+          </div>
+
+          <p id="clockHintText" class="text-xs text-slate-500 mt-2">
+            提示：如學校網絡或瀏覽器限制而未能顯示上方天文台網頁，可按右上角「大字備用時鐘」或「新視窗開啟」。
+          </p>
+        </div>
+
+        <!-- Exam Papers Display Grid -->
+        <div id="examCardsGrid" class="grid gap-5"></div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    (function () {
+      const STORAGE_KEY = 'hk_exam_display_state_v1';
+
+      const defaultPaper = () => ({
+        grade: '中二',
+        subject: '中文',
+        paper: '作文',
+        startTime: '08:15',
+        endTime: '09:45',
+        extraMinutes: 23,
+        note: '轉筆'
+      });
+
+      const emptyPaper = (index) => ({
+        grade: '',
+        subject: '',
+        paper: '',
+        startTime: '08:15',
+        endTime: '09:45',
+        extraMinutes: 0,
+        note: '轉筆'
+      });
+
+      let state = {
+        step: 1, // 1 = count, 2 = edit papers, 3 = display
+        papers: [defaultPaper()],
+        fontScale: 1.0,
+        layout: 'top', // 'top' | 'side'
+        clockMode: 'hko_full' // 'hko_full' | 'hko_lite' | 'fallback'
+      };
+
+      // Load saved state safely
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && Array.isArray(parsed.papers) && parsed.papers.length > 0) {
+            state.papers = parsed.papers;
+            state.fontScale = typeof parsed.fontScale === 'number' ? parsed.fontScale : 1.0;
+            state.layout = parsed.layout === 'side' ? 'side' : 'top';
+            state.clockMode = ['hko_full', 'hko_lite', 'fallback'].includes(parsed.clockMode) ? parsed.clockMode : 'hko_full';
+          }
+        }
+      } catch (e) {
+        // Ignore storage errors
+      }
+
+      function saveState() {
+        try {
+          localStorage.setItem(STORAGE_KEY, JSON.stringify({
+            papers: state.papers,
+            fontScale: state.fontScale,
+            layout: state.layout,
+            clockMode: state.clockMode
+          }));
+        } catch (e) {
+          // Ignore storage errors
+        }
+      }
+
+      // DOM References
+      const navStep1Btn = document.getElementById('navStep1Btn');
+      const navStep2Btn = document.getElementById('navStep2Btn');
+      const navDisplayBtn = document.getElementById('navDisplayBtn');
+      const setupView = document.getElementById('setupView');
+      const step1Card = document.getElementById('step1Card');
+      const step2Card = document.getElementById('step2Card');
+      const displayView = document.getElementById('displayView');
+
+      const paperCountInput = document.getElementById('paperCountInput');
+      const goToStep2Btn = document.getElementById('goToStep2Btn');
+      const backToStep1Btn = document.getElementById('backToStep1Btn');
+      const addPaperBtn = document.getElementById('addPaperBtn');
+      const startDisplayBtn = document.getElementById('startDisplayBtn');
+      const startDisplayBottomBtn = document.getElementById('startDisplayBottomBtn');
+      const step2CountLabel = document.getElementById('step2CountLabel');
+      const paperFormsContainer = document.getElementById('paperFormsContainer');
+
+      const editDataBtn = document.getElementById('editDataBtn');
+      const toggleLayoutBtn = document.getElementById('toggleLayoutBtn');
+      const fontSmallerBtn = document.getElementById('fontSmallerBtn');
+      const fontLargerBtn = document.getElementById('fontLargerBtn');
+      const fontScaleLabel = document.getElementById('fontScaleLabel');
+      const presentationBtn = document.getElementById('presentationBtn');
+      const floatingExitBtn = document.getElementById('floatingExitBtn');
+
+      const displayMainGrid = document.getElementById('displayMainGrid');
+      const clockSection = document.getElementById('clockSection');
+      const examCardsGrid = document.getElementById('examCardsGrid');
+
+      const clockModeHkoFull = document.getElementById('clockModeHkoFull');
+      const clockModeHkoLite = document.getElementById('clockModeHkoLite');
+      const clockModeFallback = document.getElementById('clockModeFallback');
+      const hkoIframeContainer = document.getElementById('hkoIframeContainer');
+      const hkoClockIframe = document.getElementById('hkoClockIframe');
+      const fallbackClockContainer = document.getElementById('fallbackClockContainer');
+      const hkDateText = document.getElementById('hkDateText');
+      const hkTimeText = document.getElementById('hkTimeText');
+      const toastEl = document.getElementById('toast');
+
+      let toastTimer = null;
+      function showToast(msg) {
+        toastEl.textContent = msg;
+        toastEl.classList.remove('hidden');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => {
+          toastEl.classList.add('hidden');
+        }, 2500);
+      }
+
+      // Time Helpers
+      function formatDisplayTime(timeStr) {
+        if (!timeStr || !timeStr.includes(':')) return '--:--';
+        const parts = timeStr.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        if (isNaN(h) || isNaN(m)) return '--:--';
+        return `${h}:${String(m).padStart(2, '0')}`;
+      }
+
+      function addMinutesToTime(timeStr, extraMins) {
+        if (!timeStr || !timeStr.includes(':')) return '--:--';
+        const parts = timeStr.split(':');
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const add = parseInt(extraMins, 10) || 0;
+        if (isNaN(h) || isNaN(m)) return '--:--';
+        const total = ((h * 60 + m + add) % 1440 + 1440) % 1440;
+        const newH = Math.floor(total / 60);
+        const newM = total % 60;
+        return `${newH}:${String(newM).padStart(2, '0')}`;
+      }
+
+      function escapeHtml(str) {
+        return String(str || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      // Sync papers array length to count
+      function resizePapers(targetCount) {
+        const count = Math.max(1, Math.min(12, parseInt(targetCount, 10) || 1));
+        while (state.papers.length < count) {
+          state.papers.push(emptyPaper(state.papers.length));
+        }
+        if (state.papers.length > count) {
+          state.papers = state.papers.slice(0, count);
+        }
+        paperCountInput.value = count;
+        saveState();
+      }
+
+      // Navigation & View Switching
+      function setStep(step) {
+        state.step = step;
+        document.body.classList.remove('presentation-mode');
+
+        navStep1Btn.className = 'px-3 py-1.5 rounded-lg text-sm font-medium transition ' +
+          (step === 1 ? 'bg-sky-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200');
+        navStep2Btn.className = 'px-3 py-1.5 rounded-lg text-sm font-medium transition ' +
+          (step === 2 ? 'bg-sky-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200');
+        navDisplayBtn.className = 'px-3 py-1.5 rounded-lg text-sm font-medium transition ' +
+          (step === 3 ? 'bg-emerald-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-slate-200');
+
+        if (step === 1) {
+          setupView.classList.remove('hidden');
+          step1Card.classList.remove('hidden');
+          step2Card.classList.add('hidden');
+          displayView.classList.add('hidden');
+          paperCountInput.value = state.papers.length;
+        } else if (step === 2) {
+          setupView.classList.remove('hidden');
+          step1Card.classList.add('hidden');
+          step2Card.classList.remove('hidden');
+          displayView.classList.add('hidden');
+          renderPaperForms();
+        } else {
+          setupView.classList.add('hidden');
+          displayView.classList.remove('hidden');
+          renderDisplayView();
+        }
+      }
+
+      // Render Step 2 Forms
+      function renderPaperForms() {
+        step2CountLabel.textContent = state.papers.length;
+        paperFormsContainer.innerHTML = state.papers.map((p, idx) => {
+          const extra = parseInt(p.extraMinutes, 10) || 0;
+          const previewEnd = extra > 0 ? addMinutesToTime(p.endTime, extra) : null;
+          const gradeButtons = ['中一', '中二', '中三', '中四', '中五', '中六']
+            .map(g => `<button type="button" data-idx="${idx}" data-grade="${g}" class="grade-chip px-2 py-0.5 rounded text-xs font-medium border ${p.grade === g ? 'bg-sky-600 text-white border-sky-600' : 'bg-slate-50 text-slate-700 border-slate-300 hover:bg-sky-50'}">${g}</button>`)
+            .join('');
+
+          return `
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4" data-paper-index="${idx}">
+              <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 class="text-lg font-bold text-slate-900">卷別 ${idx + 1}</h3>
+                ${state.papers.length > 1 ? `<button type="button" data-remove-idx="${idx}" class="remove-paper-btn text-xs font-semibold text-rose-600 hover:text-rose-800 px-2.5 py-1 rounded-lg hover:bg-rose-50 transition">刪除此卷別</button>` : ''}
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="sm:col-span-3">
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">年級</label>
+                  <input type="text" data-field="grade" data-idx="${idx}" value="${escapeHtml(p.grade)}" placeholder="例如：中二"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base" />
+                  <div class="flex flex-wrap gap-1.5 mt-1.5">${gradeButtons}</div>
+                </div>
+
+                <div class="sm:col-span-2">
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">科目</label>
+                  <input type="text" data-field="subject" data-idx="${idx}" value="${escapeHtml(p.subject)}" placeholder="例如：中文"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base" />
+                </div>
+
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">卷別</label>
+                  <input type="text" data-field="paper" data-idx="${idx}" value="${escapeHtml(p.paper)}" placeholder="例如：作文 / 卷一"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">開始時間</label>
+                  <input type="time" data-field="startTime" data-idx="${idx}" value="${escapeHtml(p.startTime)}"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base tabular-nums" />
+                </div>
+
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">正常結束時間</label>
+                  <input type="time" data-field="endTime" data-idx="${idx}" value="${escapeHtml(p.endTime)}"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base tabular-nums" />
+                </div>
+
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">加時（分鐘）</label>
+                  <input type="number" min="0" max="300" data-field="extraMinutes" data-idx="${idx}" value="${escapeHtml(p.extraMinutes)}" placeholder="0"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-base tabular-nums" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div>
+                  <label class="block text-sm font-semibold text-slate-700 mb-1">時間後括號提示（選填）</label>
+                  <input type="text" data-field="note" data-idx="${idx}" value="${escapeHtml(p.note)}" placeholder="例如：轉筆（留空則不顯示）"
+                    class="paper-input w-full px-3 py-2 border border-slate-300 rounded-xl focus:border-sky-500 focus:outline-none text-sm" />
+                </div>
+
+                <div class="text-sm bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-700">
+                  <span class="font-semibold">計算預覽：</span>
+                  <span class="tabular-nums font-bold text-slate-900" data-preview-idx="${idx}">
+                    ${formatDisplayTime(p.startTime)}-${formatDisplayTime(p.endTime)}${p.note ? ` (${escapeHtml(p.note)})` : ''}${previewEnd ? ` · 加時至 ${previewEnd}(+${extra} 分鐘)` : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      // Render Step 3 Display View
+      function renderDisplayView() {
+        document.documentElement.style.setProperty('--exam-scale', String(state.fontScale));
+        fontScaleLabel.textContent = `${Math.round(state.fontScale * 100)}%`;
+
+        // Layout: top vs side
+        if (state.layout === 'side') {
+          displayMainGrid.className = 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start';
+          clockSection.className = 'lg:col-span-4 bg-white rounded-2xl shadow-sm border border-slate-200 p-4';
+          examCardsGrid.className = 'lg:col-span-8 grid gap-5 ' + (state.papers.length === 1 ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2');
+          toggleLayoutBtn.textContent = '版面：時鐘置右';
+        } else {
+          displayMainGrid.className = 'flex flex-col gap-6';
+          clockSection.className = 'bg-white rounded-2xl shadow-sm border border-slate-200 p-4';
+          const cols = state.papers.length === 1 ? 'grid-cols-1 max-w-4xl mx-auto w-full'
+            : state.papers.length === 2 ? 'grid-cols-1 md:grid-cols-2'
+            : 'grid-cols-1 md:grid-cols-2 xl:grid-cols-2';
+          examCardsGrid.className = `grid gap-6 ${cols}`;
+          toggleLayoutBtn.textContent = '版面：時鐘置頂';
+        }
+
+        // Render exam cards matching the photo format (without「黑板」)
+        examCardsGrid.innerHTML = state.papers.map((p) => {
+          const gradeText = (p.grade || '').trim() || '—';
+          const subjectPart = (p.subject || '').trim();
+          const paperPart = (p.paper || '').trim();
+          // Join cleanly: e.g. 中文 + 作文 => 中文作文; if English with space if needed
+          let titleLine = '';
+          if (subjectPart && paperPart) {
+            const needsSpace = /[A-Za-z0-9]$/.test(subjectPart) && /^[A-Za-z0-9]/.test(paperPart);
+            titleLine = needsSpace ? `${subjectPart} ${paperPart}` : `${subjectPart}${paperPart}`;
+          } else {
+            titleLine = subjectPart || paperPart || '—';
+          }
+
+          const startStr = formatDisplayTime(p.startTime);
+          const endStr = formatDisplayTime(p.endTime);
+          const noteStr = (p.note || '').trim();
+          const timeLine = `${startStr}-${endStr}${noteStr ? ` (${escapeHtml(noteStr)})` : ''}`;
+
+          const extraMins = parseInt(p.extraMinutes, 10) || 0;
+          const extraEndStr = extraMins > 0 ? addMinutesToTime(p.endTime, extraMins) : null;
+
+          return `
+            <div class="exam-card rounded-xl px-6 py-8 sm:px-10 sm:py-10 flex flex-col items-center justify-center text-center gap-4 sm:gap-5">
+              <div class="exam-grade text-slate-900">${escapeHtml(gradeText)}</div>
+              <div class="exam-subject text-slate-900">${escapeHtml(titleLine)}</div>
+              <div class="exam-time text-slate-900 tabular-nums">${timeLine}</div>
+              ${extraEndStr ? `<div class="exam-extra text-rose-700 tabular-nums">加時至 ${extraEndStr}(+${extraMins} 分鐘)</div>` : ''}
+            </div>
+          `;
+        }).join('');
+
+        applyClockMode();
+      }
+
+      // Clock Mode Handling
+      function applyClockMode() {
+        const modes = [
+          { btn: clockModeHkoFull, mode: 'hko_full' },
+          { btn: clockModeHkoLite, mode: 'hko_lite' },
+          { btn: clockModeFallback, mode: 'fallback' }
+        ];
+        modes.forEach(({ btn, mode }) => {
+          if (state.clockMode === mode) {
+            btn.className = 'clock-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-sky-600 text-white transition';
+          } else {
+            btn.className = 'clock-mode-btn px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition';
+          }
+        });
+
+        if (state.clockMode === 'fallback') {
+          hkoIframeContainer.classList.add('hidden');
+          fallbackClockContainer.classList.remove('hidden');
+        } else {
+          fallbackClockContainer.classList.add('hidden');
+          hkoIframeContainer.classList.remove('hidden');
+          const targetSrc = state.clockMode === 'hko_lite'
+            ? 'https://www.hko.gov.hk/tc/gts/time/digital_clock.html'
+            : 'https://www.hko.gov.hk/tc/gts/time/clock_e.html';
+          if (hkoClockIframe.getAttribute('src') !== targetSrc) {
+            hkoClockIframe.setAttribute('src', targetSrc);
+          }
+        }
+      }
+
+      // Fallback Hong Kong Time Clock Ticker
+      function updateFallbackClock() {
+        const now = new Date();
+        try {
+          const dateFmt = new Intl.DateTimeFormat('zh-HK', {
+            timeZone: 'Asia/Hong_Kong',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            weekday: 'long'
+          }).format(now);
+          const timeFmt = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Hong_Kong',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: false
+          }).format(now);
+          hkDateText.textContent = dateFmt;
+          hkTimeText.textContent = timeFmt;
+        } catch (e) {
+          hkDateText.textContent = now.toLocaleDateString();
+          hkTimeText.textContent = now.toLocaleTimeString();
+        }
+      }
+      updateFallbackClock();
+      setInterval(updateFallbackClock, 250);
+
+      // Event Listeners
+      navStep1Btn.addEventListener('click', () => setStep(1));
+      navStep2Btn.addEventListener('click', () => setStep(2));
+      navDisplayBtn.addEventListener('click', () => setStep(3));
+
+      document.querySelectorAll('.quick-count-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const c = parseInt(btn.getAttribute('data-count'), 10);
+          paperCountInput.value = c;
+          resizePapers(c);
+        });
+      });
+
+      goToStep2Btn.addEventListener('click', () => {
+        const count = parseInt(paperCountInput.value, 10);
+        if (isNaN(count) || count < 1 || count > 12) {
+          showToast('請輸入 1 至 12 之間的卷別數量');
+          return;
+        }
+        resizePapers(count);
+        setStep(2);
+      });
+
+      backToStep1Btn.addEventListener('click', () => setStep(1));
+
+      addPaperBtn.addEventListener('click', () => {
+        if (state.papers.length >= 12) {
+          showToast('最多支援同時顯示 12 個卷別');
+          return;
+        }
+        state.papers.push(emptyPaper(state.papers.length));
+        saveState();
+        renderPaperForms();
+      });
+
+      function goDisplay() {
+        saveState();
+        setStep(3);
+      }
+      startDisplayBtn.addEventListener('click', goDisplay);
+      startDisplayBottomBtn.addEventListener('click', goDisplay);
+      editDataBtn.addEventListener('click', () => setStep(2));
+
+      // Delegated events inside paperFormsContainer
+      paperFormsContainer.addEventListener('input', (e) => {
+        const target = e.target;
+        if (!target.classList.contains('paper-input')) return;
+        const idx = parseInt(target.getAttribute('data-idx'), 10);
+        const field = target.getAttribute('data-field');
+        if (isNaN(idx) || !field || !state.papers[idx]) return;
+
+        state.papers[idx][field] = field === 'extraMinutes'
+          ? (target.value === '' ? 0 : Math.max(0, parseInt(target.value, 10) || 0))
+          : target.value;
+        saveState();
+
+        // Update inline preview
+        const p = state.papers[idx];
+        const extra = parseInt(p.extraMinutes, 10) || 0;
+        const previewEnd = extra > 0 ? addMinutesToTime(p.endTime, extra) : null;
+        const previewEl = paperFormsContainer.querySelector(`[data-preview-idx="${idx}"]`);
+        if (previewEl) {
+          previewEl.textContent = `${formatDisplayTime(p.startTime)}-${formatDisplayTime(p.endTime)}${p.note ? ` (${p.note})` : ''}${previewEnd ? ` · 加時至 ${previewEnd}(+${extra} 分鐘)` : ''}`;
+        }
+      });
+
+      paperFormsContainer.addEventListener('click', (e) => {
+        const chip = e.target.closest('.grade-chip');
+        if (chip) {
+          const idx = parseInt(chip.getAttribute('data-idx'), 10);
+          const grade = chip.getAttribute('data-grade');
+          if (!isNaN(idx) && state.papers[idx]) {
+            state.papers[idx].grade = grade;
+            saveState();
+            renderPaperForms();
+          }
+          return;
+        }
+
+        const removeBtn = e.target.closest('.remove-paper-btn');
+        if (removeBtn) {
+          const idx = parseInt(removeBtn.getAttribute('data-remove-idx'), 10);
+          if (!isNaN(idx) && state.papers.length > 1) {
+            state.papers.splice(idx, 1);
+            saveState();
+            renderPaperForms();
+          }
+        }
+      });
+
+      // Display Toolbar Controls
+      toggleLayoutBtn.addEventListener('click', () => {
+        state.layout = state.layout === 'top' ? 'side' : 'top';
+        saveState();
+        renderDisplayView();
+      });
+
+      fontSmallerBtn.addEventListener('click', () => {
+        state.fontScale = Math.max(0.6, Math.round((state.fontScale - 0.1) * 10) / 10);
+        saveState();
+        renderDisplayView();
+      });
+
+      fontLargerBtn.addEventListener('click', () => {
+        state.fontScale = Math.min(1.8, Math.round((state.fontScale + 0.1) * 10) / 10);
+        saveState();
+        renderDisplayView();
+      });
+
+      presentationBtn.addEventListener('click', () => {
+        document.body.classList.add('presentation-mode');
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        }
+      });
+
+      floatingExitBtn.addEventListener('click', () => {
+        document.body.classList.remove('presentation-mode');
+        if (document.fullscreenElement && document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+
+      clockModeHkoFull.addEventListener('click', () => {
+        state.clockMode = 'hko_full';
+        saveState();
+        applyClockMode();
+      });
+
+      clockModeHkoLite.addEventListener('click', () => {
+        state.clockMode = 'hko_lite';
+        saveState();
+        applyClockMode();
+      });
+
+      clockModeFallback.addEventListener('click', () => {
+        state.clockMode = 'fallback';
+        saveState();
+        applyClockMode();
+      });
+
+      // Initialize
+      setStep(1);
+    })();
+  </script>
+</body>
+</html>
